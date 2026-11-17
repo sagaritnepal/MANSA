@@ -5,7 +5,7 @@
   const CFG = window.MANSA_SUPABASE || {};
   const USE_SB = Boolean(CFG.url && CFG.anonKey);
   const SDK = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-  const BUCKET = "media";
+  const BUCKET = "mansa_media";
 
   // ---------- validation (mirrors the limits in supabase/schema.sql) ----------
   const str = (v, n) => String(v ?? "").trim().slice(0, n);
@@ -141,6 +141,20 @@
   // Featured products: a list of ids. Older data stored one id, or ids joined with commas.
   const featuredList = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim()).filter(Boolean);
 
+  // A random id kept per browser (not per tab) so the admin "Visits" view can tell apart unique
+  // visitors from repeat page loads. Not a name or any personal detail.
+  const VISIT_KEY = "mansa-visitor-id";
+  function visitorId() {
+    try {
+      let id = localStorage.getItem(VISIT_KEY);
+      if (!id) {
+        id = window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(VISIT_KEY, id);
+      }
+      return id;
+    } catch { return ""; }
+  }
+
   // ---------- public API ----------
   const api = {
     mode: USE_SB ? "supabase" : "local",
@@ -152,8 +166,8 @@
       }
       const c = await sb();
       const [rows, set] = await Promise.all([
-        c.from("products").select("*").order("sort_order").then(must),
-        c.from("settings").select("value").eq("key", "store").maybeSingle().then(must),
+        c.from("mansa_products").select("*").order("sort_order").then(must),
+        c.from("mansa_settings").select("value").eq("key", "store").maybeSingle().then(must),
       ]);
       const v = (set && set.value) || {};
       return { featured: featuredList(v.featured), heroImage: v.heroImage || "", products: rows.map(fromRow) };
@@ -163,7 +177,7 @@
     async loadCompany() {
       if (!USE_SB) return getJson("company.json");
       const c = await sb();
-      const row = must(await c.from("settings").select("value").eq("key", "company").maybeSingle());
+      const row = must(await c.from("mansa_settings").select("value").eq("key", "company").maybeSingle());
       return (row && row.value) || {};
     },
 
@@ -171,14 +185,14 @@
       if (!USE_SB) return call("/api/company", co);
       const clean = cleanCompany(co);
       const c = await sb();
-      must(await c.from("settings").upsert({ key: "company", value: clean }));
+      must(await c.from("mansa_settings").upsert({ key: "company", value: clean }));
       return clean;
     },
 
     async loadAd() {
       if (!USE_SB) return getJson("ad.json");
       const c = await sb();
-      const row = must(await c.from("settings").select("value").eq("key", "ad").maybeSingle());
+      const row = must(await c.from("mansa_settings").select("value").eq("key", "ad").maybeSingle());
       return (row && row.value) || {};
     },
 
@@ -187,7 +201,7 @@
       if (!USE_SB) return;
       try {
         const c = await sb();
-        must(await c.from("orders").insert({
+        must(await c.from("mansa_orders").insert({
           name: str(order.name, 120), phone: str(order.phone, 40),
           method: order.method === "pickup" ? "pickup" : "delivery",
           address: str(order.address, 500), note: str(order.note, 300),
@@ -214,8 +228,8 @@
       }
       const c = await sb();
       must(await c.auth.signInWithPassword({ email, password }));
-      // Signing in is not enough: the account must also be listed in public.admins.
-      const ok = must(await c.rpc("is_admin"));
+      // Signing in is not enough: the account must also be listed in public.mansa_admins.
+      const ok = must(await c.rpc("mansa_is_admin"));
       if (!ok) { await c.auth.signOut(); throw new Error("This account is not an admin."); }
     },
 
@@ -233,7 +247,7 @@
       const heroImage = url(store.heroImage);
       if (!USE_SB) return call("/api/store", { featured, heroImage, products });
       const c = await sb();
-      must(await c.rpc("save_store", { p_products: products.map(toRow), p_featured: featured.join(","), p_hero_image: heroImage }));
+      must(await c.rpc("mansa_save_store", { p_products: products.map(toRow), p_featured: featured.join(","), p_hero_image: heroImage }));
       return { featured, heroImage, products };
     },
 
@@ -241,7 +255,7 @@
       if (!USE_SB) return call("/api/ad", ad);
       const clean = cleanAd(ad);
       const c = await sb();
-      must(await c.from("settings").upsert({ key: "ad", value: clean }));
+      must(await c.from("mansa_settings").upsert({ key: "ad", value: clean }));
       return clean;
     },
 
@@ -280,12 +294,33 @@
     async listOrders() {
       if (!USE_SB) return null; // orders are only stored with Supabase
       const c = await sb();
-      return must(await c.from("orders").select("*").order("created_at", { ascending: false }).limit(200));
+      return must(await c.from("mansa_orders").select("*").order("created_at", { ascending: false }).limit(200));
     },
 
     async setOrderStatus(id, status) {
       const c = await sb();
-      must(await c.from("orders").update({ status }).eq("id", id));
+      must(await c.from("mansa_orders").update({ status }).eq("id", id));
+    },
+
+    // ---------- marketing: visits (Supabase only, silently skipped otherwise) ----------
+    async logVisit() {
+      if (!USE_SB) return;
+      try {
+        const c = await sb();
+        await c.from("mansa_visits").insert({
+          path: str(location.pathname + location.search, 200),
+          referrer: str(document.referrer, 300),
+          session_id: str(visitorId(), 64),
+        });
+      } catch (e) { console.warn("Visit not logged:", e.message); }
+    },
+
+    async loadVisits() {
+      if (!USE_SB) return [];
+      const c = await sb();
+      const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      return must(await c.from("mansa_visits").select("created_at, path, referrer, session_id")
+        .gte("created_at", since).order("created_at", { ascending: false }).limit(5000));
     },
   };
 

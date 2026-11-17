@@ -133,6 +133,7 @@
       <button data-tab="ad">Ad popup</button>
       <button data-tab="company">Company</button>
       <button data-tab="orders" id="orders-tab" hidden>Orders</button>
+      <button data-tab="marketing" id="marketing-tab" hidden>Marketing</button>
     </nav>
     <span><a href="./" target="_blank" rel="noopener">View store ↗</a><button class="linkbtn" id="logout" hidden>Sign out</button></span>
   </div></div>
@@ -299,6 +300,25 @@
       </div>
       <p class="hint">Orders placed on the website are saved here and also sent to you on WhatsApp. Prices are as shown to the customer at checkout.</p>
     </section>
+
+    <!-- Marketing: leads + visits (Supabase only) -->
+    <section id="tab-marketing" hidden>
+      <div class="box">
+        <div class="head">
+          <h2>Marketing</h2>
+          <div class="toolbar">
+            <select class="f" id="mk-view" aria-label="Marketing view">
+              <option value="leads">Leads</option>
+              <option value="visits">Visits</option>
+            </select>
+            <button class="btn sm ghost" id="mk-refresh">Refresh</button>
+          </div>
+        </div>
+        <div id="mk-leads"></div>
+        <div id="mk-visits" hidden></div>
+      </div>
+      <p class="hint" id="mk-hint">Leads are people who started checkout on the website and left their contact details.</p>
+    </section>
   </main>
 
   <!-- Product editor -->
@@ -400,6 +420,7 @@
       $("email").required = true;
       $("login-hint").textContent = "Sign in with your admin email and password.";
       $("orders-tab").hidden = false;
+      $("marketing-tab").hidden = false;
     }
 
     let toastTimer;
@@ -443,9 +464,10 @@
 
     document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
       document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
-      ["products", "images", "ad", "company", "orders"].forEach((t) => { $(`tab-${t}`).hidden = t !== b.dataset.tab; });
+      ["products", "images", "ad", "company", "orders", "marketing"].forEach((t) => { $(`tab-${t}`).hidden = t !== b.dataset.tab; });
       if (b.dataset.tab === "images") renderLibrary();
       if (b.dataset.tab === "orders") loadOrders();
+      if (b.dataset.tab === "marketing") loadMarketing();
     }));
 
     // ---------- images: upload (with downscale) + library ----------
@@ -840,6 +862,52 @@
     }
     $("order-filter").onchange = renderOrders;
     $("orders-refresh").onclick = loadOrders;
+
+    // ---------- marketing: leads (from orders) + visits ----------
+    let visits = [];
+    async function loadMarketing() {
+      if ($("mk-view").value === "leads") { await loadOrders(); renderLeads(); }
+      else { await loadVisits(); renderVisits(); }
+    }
+    function renderLeads() {
+      $("mk-hint").textContent = "Leads are people who started checkout on the website and left their contact details.";
+      $("mk-leads").hidden = false; $("mk-visits").hidden = true;
+      $("mk-leads").replaceChildren(...(orders.length ? orders.map((o) => {
+        const when = new Date(o.created_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+        return el("div", { className: "order" },
+          el("div", {},
+            el("div", { className: "who", textContent: o.name }),
+            el("div", { className: "meta" },
+              el("a", { href: `tel:${o.phone.replace(/[^+\d]/g, "")}`, textContent: o.phone }),
+              ` · ${when}`)),
+          el("div", { className: "side" }, el("strong", { textContent: money(o.total) })),
+          el("div", { className: "items", textContent: o.items.map((i) => `${i.qty} × ${i.name}`).join(", ") }));
+      }) : [el("p", { className: "empty-note", textContent: "No leads yet." })]));
+    }
+    async function loadVisits() {
+      $("mk-leads").hidden = true; $("mk-visits").hidden = false;
+      $("mk-visits").replaceChildren(el("p", { className: "empty-note", textContent: "Loading…" }));
+      try { visits = (await guard(() => DB.loadVisits())) || []; }
+      catch (err) { visits = []; toast(err.message); }
+    }
+    function renderVisits() {
+      $("mk-hint").textContent = "Page loads on the public site over the last 30 days. No names or personal details are recorded.";
+      const byDay = new Map(); const sessions = new Set();
+      for (const v of visits) {
+        const day = String(v.created_at).slice(0, 10);
+        byDay.set(day, (byDay.get(day) || 0) + 1);
+        if (v.session_id) sessions.add(v.session_id);
+      }
+      const days = [...byDay.keys()].sort().reverse().slice(0, 14);
+      $("mk-visits").replaceChildren(
+        el("p", { className: "sub", textContent: `${visits.length} page views · ${sessions.size} unique visitors (last 30 days)` }),
+        ...(days.length ? days.map((d) => el("div", { className: "order" },
+          el("div", { className: "who", textContent: d }),
+          el("div", { className: "side" }, el("strong", { textContent: `${byDay.get(d)} views` }))))
+          : [el("p", { className: "empty-note", textContent: "No visits recorded yet." })]));
+    }
+    $("mk-view").onchange = loadMarketing;
+    $("mk-refresh").onclick = loadMarketing;
 
     DB.restore().then((ok) => { if (ok) return boot(); }).catch(() => signOut());
   })();

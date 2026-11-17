@@ -1,5 +1,6 @@
 (async () => {
   const { STORE } = window;
+  window.MansaData.logVisit().catch(() => {});  // for the admin "Marketing" tab; never blocks the page
   // The catalogue comes from Supabase, or store.json on the local server (see data.js).
   let data = {};
   let company = {};
