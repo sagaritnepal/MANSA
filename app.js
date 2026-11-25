@@ -943,7 +943,12 @@
   };
   form.querySelectorAll('input[name="method"]').forEach((r) => r.addEventListener("change", syncMethod));
 
-  $("checkout-btn").onclick = () => { closeCart(); showStep(false); syncMethod(); dialog.showModal(); };
+  $("checkout-btn").onclick = () => {
+    // What is in the cart goes with the form, so the order shows as a lead in Jageer's Website page.
+    form.elements.order_items.value =
+      entries().map(({ p, qty }) => `${qty} x ${p.name} (${money(p.price * qty)})`).join(", ") + ` - Total ${money(total())}`;
+    closeCart(); showStep(false); syncMethod(); dialog.showModal();
+  };
   $("cancel-checkout").onclick = () => dialog.close();
   dialog.addEventListener("click", (e) => { if (e.target === dialog && !$("co-form").hidden) dialog.close(); });
 

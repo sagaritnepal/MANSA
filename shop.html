@@ -9,6 +9,28 @@
   <link rel="apple-touch-icon" href="images/favicon-180.png">
   <meta name="description" content="Shop cameras, CCTV, printers, toner and computer hardware from Mansa Technology, Jorpati, Kathmandu. Order on WhatsApp.">
   <link rel="stylesheet" href="styles.css">
+<!-- Jageer: website visits and leads -->
+<script>
+(function(){
+var U="https://ywapfmvcvqprfcdcopfp.supabase.co/rest/v1/rpc/",K="sb_publishable_8vKgyGEiWTYGoK3zohL7xQ_oq6RwKzV",S="527b7c3cee3142a58af470d6202fdb3d";
+function post(f,b){try{fetch(U+f,{method:"POST",keepalive:true,headers:{apikey:K,Authorization:"Bearer "+K,"Content-Type":"application/json"},body:JSON.stringify(b)})}catch(e){}}
+var v="";try{v=localStorage.getItem("jageer_vid")||"";if(!v){v=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("jageer_vid",v)}}catch(e){}
+var dev=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?"mobile":"desktop",last="";
+function ref(){try{var r=document.referrer;return r&&new URL(r).host!==location.host?r:""}catch(e){return ""}}
+function visit(){if(location.pathname===last)return;last=location.pathname;post("track_website_visit",{p_key:S,p_visitor:v,p_path:location.pathname,p_referrer:ref(),p_device:dev})}
+visit();
+var ps=history.pushState;history.pushState=function(){ps.apply(this,arguments);setTimeout(visit,0)};addEventListener("popstate",visit);
+document.addEventListener("submit",function(e){var f=e.target,d={},n="",p="",m="",em="",i,el,k,val;if(!f||!f.elements)return;
+for(i=0;i<f.elements.length;i++){el=f.elements[i];k=(el.name||el.id||"").toLowerCase();val=String(el.value||"").trim();
+if(!k||!val||/password|hidden|file|submit|button|reset/.test(el.type)||((el.type==="checkbox"||el.type==="radio")&&!el.checked)||/pass|card|cvv|otp|token|csrf|captcha|nonce/.test(k))continue;
+d[el.name||el.id]=val.slice(0,1000);
+if(el.type==="email"||/mail/.test(k)){if(!em)em=val}
+else if(el.type==="tel"||/phone|mobile|tel|whatsapp|number/.test(k)){if(!p)p=val}
+else if(/name/.test(k)&&!/company|business|user/.test(k)){n=n?n+" "+val:val}
+else if(el.tagName==="TEXTAREA"||/message|msg|comment|enquiry|inquiry|query|detail|requirement/.test(k)){m=m?m+" | "+val:val}}
+if(n||p||em||m)post("submit_website_lead",{p_key:S,p_name:n,p_phone:p,p_email:em,p_message:m,p_page:location.pathname,p_fields:d})},true);
+})();
+</script>
 </head>
 <body>
   <div class="announce" id="announce"></div>
@@ -160,6 +182,7 @@
         <label class="fld">Full name <input name="name" required autocomplete="name"></label>
         <label class="fld">Phone <input name="phone" type="tel" required autocomplete="tel"></label>
         <label class="fld" id="addr-wrap">Delivery address <textarea name="address" rows="3" autocomplete="street-address"></textarea></label>
+        <textarea name="order_items" hidden aria-hidden="true" tabindex="-1"></textarea>
         <p class="fine">Next, WhatsApp opens with your order ready to send.</p>
         <div class="row">
           <button type="button" class="btn ghost" id="cancel-checkout">Cancel</button>
